@@ -17,6 +17,8 @@ export async function connected(config: Config, fetch?: typeof globalThis.fetch,
 }
 
 export interface Asked {
+  method: string;
+  body?: unknown;
   path: string;
   query: Record<string, string>;
   headers: Record<string, string>;
@@ -31,7 +33,7 @@ export function fakeHub(routes: Record<string, { status?: number; body: unknown;
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     const headers = Object.fromEntries(new Headers(init?.headers).entries());
-    asked.push({ path: url.pathname, query: Object.fromEntries(url.searchParams), headers });
+    asked.push({ method: init?.method ?? 'GET', ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}), path: url.pathname, query: Object.fromEntries(url.searchParams), headers });
     const route = routes[url.pathname];
     const json = { 'Content-Type': 'application/json', 'Armature-Version': '2026-11-20' };
     if (!route) return new Response(JSON.stringify({ error: 'not_found', message: `No route ${url.pathname}` }), { status: 404, headers: json });

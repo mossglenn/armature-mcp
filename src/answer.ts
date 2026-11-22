@@ -125,6 +125,15 @@ const MEANING: Record<string, string> = {
   unsupported_capability: 'This hub does not offer that part of the API. describe_hub lists what it offers.',
   forbidden: 'The hub does not let the configured person read this. ARMATURE_USER names who the server reads as.',
   not_registered: 'The configured person is not registered on this hub. ARMATURE_USER names who the server reads as.',
+  // Writes (M4).
+  precondition_failed: 'The branch has moved since the commit passed as basedOn: someone else wrote to it. Read what changed (branch_changes, or list_branches for the new commit), then file again with basedOn the new commit if the proposal still holds.',
+  invariant_violation: "The proposal breaks one of Armature's rules, listed below; nothing was written. Correct it and file again.",
+  invalid_document: 'The proposal is not in the shape the hub takes; nothing was written. The message says which field.',
+  branch_exists: 'A branch by that name exists already. Choose another topic, or file on that branch if it is the proposal this conversation opened.',
+  bad_name: 'The branch name is not one the hub accepts: letters, digits, dots, hyphens and underscores.',
+  unknown_agent: 'ARMATURE_AGENT names no agent registered on this hub; a person registers it once (POST /users, an externalId starting agent:).',
+  not_an_agent: 'ARMATURE_AGENT names a person, not an agent; it must name an agent registered on this hub.',
+  remote_only: 'A workspace hub does not do that; on a workspace hub, file on the workspace itself.',
 };
 
 const GENERAL = 'Check the arguments, or call describe_hub to see what this hub serves.';
@@ -133,9 +142,12 @@ export function refusal(err: unknown): CallToolResult {
   if (err instanceof HubError) {
     const detail = { error: err.code, status: err.status, message: err.message, ...err.details };
     const remote = err.details.remote_needed ? ' The commit may be on the remote hub, which could not be reached; try again when it is online.' : '';
+    const violations = Array.isArray(err.details.violations)
+      ? (err.details.violations as Array<{ code?: string; field?: string; message?: string }>).map((v) => `\n- ${v.code ?? 'violation'}${v.field ? ` (${v.field})` : ''}: ${v.message ?? ''}`).join('')
+      : '';
     return {
       isError: true,
-      content: [{ type: 'text', text: `The hub refused (${err.status} ${err.code}): ${err.message}\n${MEANING[err.code] ?? GENERAL}${remote}` }],
+      content: [{ type: 'text', text: `The hub refused (${err.status} ${err.code}): ${err.message}\n${MEANING[err.code] ?? GENERAL}${remote}${violations}` }],
       structuredContent: detail,
     };
   }
@@ -144,6 +156,18 @@ export function refusal(err: unknown): CallToolResult {
     isError: true,
     content: [{ type: 'text', text: `The hub could not be reached: ${message}. Is it running, and is ARMATURE_HUB_URL its address?` }],
     structuredContent: { error: 'hub_unreachable', message },
+  };
+}
+
+/**
+ * A refusal by the server itself, before the hub is asked (plan §4.5: the
+ * server's own rules for writes): the same form as the hub's, without a status.
+ */
+export function refuse(code: string, message: string, next: string): CallToolResult {
+  return {
+    isError: true,
+    content: [{ type: 'text', text: `This server refused (${code}): ${message}\n${next}` }],
+    structuredContent: { error: code, message, refusedBy: 'armature-mcp' },
   };
 }
 
