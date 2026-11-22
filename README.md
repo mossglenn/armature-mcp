@@ -2,7 +2,7 @@
 
 An [MCP](https://modelcontextprotocol.io) server that lets an AI assistant (Claude Desktop, Claude Code, any MCP client) ask an [Armature](https://github.com/mossglenn/armature) hub about a learning design: what it holds, why each decision was made, what a change would touch. It is a client of the hub like any other tool: it reads `/api/v1` through `@armature/client` and never touches the store.
 
-**Status: M1** (2026-11-21). Seventeen read tools: the hub, its schema and branches, records and their history, and the hub's design intelligence (coverage, alignment, trace, impact, attestations, module content, item statistics). Next: M4 (filing notes and findings on a proposal branch), which the ICICLE demonstration's last beat needs. The plan, with every decision and its reason, is [docs/plan.md](docs/plan.md).
+**Status: M4** (2026-11-21). Seventeen read tools (the hub, its schema and branches, records and their history, and the hub's design intelligence), and, when writes are on, three proposal tools that open a proposal branch and file notes and findings on it as an agent acting for the person. That is every tool the ICICLE demonstration uses. Next: M2 (export, resources, prompts) and M3 (the evaluation). The plan, with every decision and its reason, is [docs/plan.md](docs/plan.md).
 
 ## Running it
 
@@ -58,9 +58,9 @@ Environment variables only; the server reads nothing else.
 | --- | --- | --- |
 | `ARMATURE_HUB_URL` | `http://localhost:3100` | The hub's origin |
 | `ARMATURE_USER` | none | The person's external identifier, sent as `Armature-User`; on a workspace hub, its owner |
-| `ARMATURE_AGENT` | none | The agent's external identifier (`agent:…`), sent as `Armature-Agent` on writes (M4) |
+| `ARMATURE_AGENT` | none | The agent's external identifier (`agent:…`), sent as `Armature-Agent` on writes; registered on the hub as an agent `User` (the ICICLE seed has `agent:armature-mcp`) |
 | `ARMATURE_BRANCH` | `main` | The branch read when a tool names none |
-| `ARMATURE_WRITES` | `off` | `on` offers the proposal tools (M4) |
+| `ARMATURE_WRITES` | `off` | `on` offers the proposal tools; needs `ARMATURE_USER` and `ARMATURE_AGENT` |
 | `ARMATURE_LOCAL_TOKEN` | none | A workspace hub's pairing key, from Armature Desktop |
 
 A bad value stops the server at start with a message on standard error and exit code 2. Standard output is the protocol, so the server never writes anything else there.
@@ -92,6 +92,32 @@ Every read takes `branch` or `ref` (a commit id), not both, and reads `ARMATURE_
 | `item_statistics` | `GET /intelligence/item-statistics` | Every metric about each item, as recorded |
 
 Each answer is a short summary the server writes, naming the commit it read, followed by the hub's JSON, which is also the result's structured content with `commit` and `revision` added. An answer over 40,000 characters is cut to fit, its largest list first, and says how much is shown and how to narrow the question. A refusal from the hub is a tool error carrying the hub's code and message, what the code means, and what to try next, so the assistant can explain it: Armature refuses to list records by the person who made them, and the refusal says why.
+
+## Proposals (writes)
+
+With `ARMATURE_WRITES=on` the server also offers three tools. Each writes as the agent (`ARMATURE_AGENT`) acting for the person (`ARMATURE_USER`). The agent is the commit's author and the record's `createdBy`, and the hub itself adds an `Armature-On-Behalf-Of` trailer naming the person, so the history says who did it for whom.
+
+| Tool | Writes | What |
+| --- | --- | --- |
+| `start_proposal_branch` | `POST /branches` | A branch `agent-<topic>` from the branch or commit the conversation read; answers with its latest commit |
+| `propose_note` | `POST /documents` | One `DesignNote` on a proposal branch: a reason or an intent, on the records it is about |
+| `propose_finding` | `POST /documents` | One `DesignFinding`, status `Open`, on a proposal branch: a concern, its evidence, a suggestion |
+
+The server applies its own rules before the hub sees a write:
+- Nothing is written to `main`.
+- On a shared hub, writes go only to branches named `agent-…`. On a workspace hub, they go to the person's workspace, and `start_proposal_branch` is not offered, since the hub refuses branch creation there.
+- It writes only notes and findings, never objectives, items or activities, and it never merges or deletes.
+
+Pass `basedOn`, the branch's latest commit as last read, and the hub refuses the write with `precondition_failed` if someone has written to the branch since. A person reads the proposal and decides; a finding is marked Addressed or Dismissed by a person, not by the agent.
+
+For the demonstration's fourth beat, add the two variables to the configuration above:
+
+```json
+"ARMATURE_AGENT": "agent:armature-mcp",
+"ARMATURE_WRITES": "on"
+```
+
+A host asks the person before it runs a tool that writes; each write tool's description says what it will write and where.
 
 ## Development
 
