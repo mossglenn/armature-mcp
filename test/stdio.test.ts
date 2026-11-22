@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { describe, expect, it } from 'vitest';
-import { text } from './helpers.js';
+import { ALL_TOOLS, text } from './helpers.js';
 
 const bin = fileURLToPath(new URL('../dist/armature-mcp.mjs', import.meta.url));
 const hub = process.env.ARMATURE_HUB_URL;
@@ -22,10 +22,10 @@ async function start(env: Record<string, string>) {
 }
 
 describe.skipIf(!existsSync(bin))('the built server over stdio', () => {
-  it('lists its tools, whether or not a hub answers', async () => {
+  it('lists every tool when no hub answers at start, and answers a call as unreachable', async () => {
     const client = await start({ ARMATURE_HUB_URL: 'http://127.0.0.1:9' });
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['describe_hub', 'list_branches']);
+    expect(tools.map((t) => t.name)).toEqual(ALL_TOOLS);
     const down = await client.callTool({ name: 'describe_hub', arguments: {} });
     expect(down.isError).toBe(true);
     await client.close();
