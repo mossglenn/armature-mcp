@@ -1,0 +1,39 @@
+{
+  "name": "@armature/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An MCP server that lets an AI assistant ask an Armature hub about a design, through its intelligence reads at a named commit",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "armature-mcp": "dist/armature-mcp.mjs"
+  },
+  "dependencies": {
+    "@armature/client": "github:mossglenn/armature#7a8e48c87adba3fdad43dcd86bb22dcd707b689c&path:packages/client",
+    "@armature/types": "github:mossglenn/armature#7a8e48c87adba3fdad43dcd86bb22dcd707b689c&path:packages/types",
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/node": "22.19.1",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "vitest": "4.0.8"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/armature-mcp.mjs --banner:js=\"#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node dist/armature-mcp.mjs"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

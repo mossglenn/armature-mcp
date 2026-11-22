@@ -1,0 +1,85 @@
+# armature-mcp's checks.
+#
+#   check     Type-check, build, and the tests that need no hub: the tools
+#             through the protocol against a fake hub, the configuration, and
+#             the built server over stdio.
+#   contract  The same tests against a real hub: TerminusDB as a service, and
+#             Armature checked out at the commit package.json pins for
+#             @armature/client, seeded with its ICICLE demo seed
+#             (npm run demo:reset) and its hub started over it, as the
+#             demonstration runs it (docs/plan.md §10).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - run: pnpm test
+
+  contract:
+    runs-on: ubuntu-latest
+    services:
+      terminusdb:
+        # The image and tag Armature's docker/docker-compose.yml pins.
+        image: terminusdb/terminusdb-server:v12.0.7
+        ports:
+          - 6363:6363
+        env:
+          TERMINUSDB_ADMIN_PASS: admin
+          TERMINUSDB_SERVER_NAME: localhost
+    env:
+      TERMINUS_URL: http://localhost:6363
+      TERMINUS_USER: admin
+      TERMINUS_PASS: admin
+      TERMINUS_DB: armature_icicle
+    steps:
+      - uses: actions/checkout@v4
+      - name: The Armature commit package.json pins
+        id: pin
+        run: echo "sha=$(node -p "require('./package.json').dependencies['@armature/client'].match(/#([0-9a-f]{40})/)[1]")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: mossglenn/armature
+          ref: ${{ steps.pin.outputs.sha }}
+          path: armature
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Armature's dependencies
+        working-directory: armature
+        run: npm ci && npm ci --prefix scripts
+      - name: Wait for the store, then seed the ICICLE demo
+        working-directory: armature
+        run: node scripts/wait_for_store.js && npm run demo:reset
+      - name: Start the hub over the seed
+        working-directory: armature
+        run: |
+          npm run build:hub --workspace app
+          PORT=3100 HOST=127.0.0.1 nohup node app/dist/server.mjs > hub.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3100/api/v1/health/ready && exit 0; sleep 1; done
+          cat hub.log; exit 1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: The tests against the hub
+        run: pnpm test
+        env:
+          ARMATURE_HUB_URL: http://localhost:3100
