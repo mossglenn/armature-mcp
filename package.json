@@ -1,6 +1,6 @@
 {
   "name": "@armature/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "An MCP server that lets an AI assistant ask an Armature hub about a design, through its intelligence reads at a named commit",
   "license": "MIT",

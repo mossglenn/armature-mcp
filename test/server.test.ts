@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { configFromEnv } from '../src/config.js';
 import { HUB_REVISION } from '../src/server.js';
-import { connected, fakeHub, text } from './helpers.js';
+import { ALL_TOOLS, connected, fakeHub, text } from './helpers.js';
 
 const DISCOVERY = {
   role: 'remote',
@@ -19,11 +19,11 @@ const BRANCHES = [
 ];
 
 describe('the server', () => {
-  it('offers describe_hub and list_branches, both read-only', async () => {
+  it('offers every read tool, in a fixed order, each read-only, when the hub could not be asked', async () => {
     const { client, close } = await connected(configFromEnv({}), fakeHub({}).fetch);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['describe_hub', 'list_branches']);
-    for (const t of tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(tools.map((t) => t.name)).toEqual(ALL_TOOLS);
+    for (const t of tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     await close();
   });
 
@@ -46,8 +46,8 @@ describe('the server', () => {
     const result = await client.callTool({ name: 'list_branches', arguments: {} });
     const lines = text(result).split('\n');
     expect(lines[0]).toBe('2 branches:');
-    expect(lines[1]).toMatch(/^main: mainhead0000 by User\/demo-reviewer, .* UTC: SME review: the \.org item's key affirmed$/);
-    expect(lines[2]).toMatch(/^demo-change: demochangehe by User\/demo-designer, .*: Raise the objective$/);
+    expect(lines[1]).toMatch(/^main: mainhead00000000 by User\/demo-reviewer, .* UTC: SME review: the \.org item's key affirmed$/);
+    expect(lines[2]).toMatch(/^demo-change: demochangehead00 by User\/demo-designer, .*: Raise the objective$/);
     expect((result.structuredContent as { branches: unknown[] }).branches).toHaveLength(2);
     await close();
   });
@@ -57,7 +57,9 @@ describe('the server', () => {
     const a = await connected(configFromEnv({}), refusing.fetch);
     const refused = await a.client.callTool({ name: 'describe_hub', arguments: {} });
     expect(refused.isError).toBe(true);
-    expect(text(refused)).toBe('The hub refused (400 unsupported_version): This hub serves 2026-11-16 and older');
+    expect(text(refused)).toBe(
+      'The hub refused (400 unsupported_version): This hub serves 2026-11-16 and older\nThis hub does not serve the API revision this server relies on. describe_hub says which revisions it serves; the server needs updating, or the hub does.'
+    );
     expect(refused.structuredContent).toMatchObject({ error: 'unsupported_version', supported: ['2026-11-16'] });
     await a.close();
 
