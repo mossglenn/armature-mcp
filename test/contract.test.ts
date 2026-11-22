@@ -222,5 +222,67 @@ describe.skipIf(!hub)('against a hub with the ICICLE seed', () => {
       const record = await call('get_record', { type: 'PrerequisiteRecord', id: prereq.id, branch });
       expect(data<{ record: { rationale: string } }>(record).record.rationale).toContain('two minutes per hop');
     });
+
+    describe('beat 4: the assistant files the finding for the designer, on a proposal branch', () => {
+      const writing = () => configFromEnv({ ARMATURE_HUB_URL: hub, ARMATURE_USER: 'demo-designer@example.edu', ARMATURE_AGENT: 'agent:armature-mcp', ARMATURE_WRITES: 'on' });
+      let propose: (name: string, args: Record<string, unknown>) => Promise<Result>;
+      let raw: Awaited<ReturnType<typeof connected>>['client'];
+      let mainBefore: string;
+
+      beforeAll(async () => {
+        const c = await connected(writing(), undefined, { discovered: await discoverHub(writing()) });
+        raw = c.client;
+        propose = async (name, args) => {
+          const result = await c.client.callTool({ name, arguments: args });
+          expect(result.isError, text(result)).toBeFalsy();
+          return result;
+        };
+        mainBefore = data<{ branches: Array<{ name: string; head: { commit: string } }> }>(await call('list_branches')).branches.find((b) => b.name === 'main')!.head.commit;
+        return () => c.close();
+      });
+
+      it('opens a proposal branch, files the finding on the prerequisite, and the record says the agent did it for the designer', async () => {
+        const topic = `split-objective-${Date.now()}`;
+        const opened = await propose('start_proposal_branch', { topic, branch });
+        const proposal = `agent-${topic}`;
+        const { commit: basedOn } = data<{ commit: string }>(opened);
+
+        const refs = await call('what_references', { type: 'LearningObjective', id: 'lateral-reading-check', branch: proposal });
+        const prereq = data<{ references: Array<{ id: string; type: string }> }>(refs).references.find((x) => x.type === 'PrerequisiteRecord')!.id;
+        const filed = await propose('propose_finding', {
+          branch: proposal,
+          subject: [prereq],
+          regarding: 'LearningObjective/lateral-reading-check',
+          label: 'Module 2 depends on the quick check this change removes',
+          finding: 'Lateral reading is now an Evaluate objective, taught as slow, deliberate weighing. Module 2 tracing chains several quick checks at about two minutes per hop and does not reteach the check, so its prerequisite no longer holds. Consider splitting the objective.',
+          confidence: 'High',
+          message: 'The raised objective conflicts with the prerequisite Module 2 was built on',
+          basedOn,
+        });
+        const { id } = data<{ id: string }>(filed);
+        expect(summary(filed)).toContain('as agent:armature-mcp for demo-designer@example.edu');
+
+        // The agent is the author and the creator; the hub, not the agent, named the person.
+        const history = await call('record_history', { type: 'DesignFinding', id, branch: proposal });
+        const [entry] = data<{ entries: Array<{ author: string; message: string }> }>(history).entries;
+        expect(entry!.author).toBe('User/design-assistant');
+        expect(entry!.message).toContain('Armature-On-Behalf-Of: demo-designer@example.edu');
+        expect(summary(history)).toContain('by User/design-assistant for demo-designer@example.edu');
+        const finding = await call('get_record', { type: 'DesignFinding', id, branch: proposal });
+        expect(data<{ record: Record<string, unknown> }>(finding).record).toMatchObject({ createdBy: 'User/design-assistant', status: 'Open', asOf: basedOn });
+        const onPrereq = await call('what_references', { type: 'PrerequisiteRecord', id: prereq, branch: proposal });
+        expect(data<{ references: Array<{ id: string }> }>(onPrereq).references.map((x) => x.id)).toContain(id);
+
+        // No design record on main changed: opening the branch wrote only its owner's grant there.
+        const onMain = await call('branch_changes', { branch: 'main', since: mainBefore });
+        expect(data<{ changes: Array<{ id: string }> }>(onMain).changes.every((x) => x.id.startsWith('Grant/'))).toBe(true);
+        await expect(raw.callTool({ name: 'get_record', arguments: { type: 'DesignFinding', id } })).resolves.toMatchObject({ isError: true });
+
+        // A write against a state the assistant has not seen is refused.
+        const stale = await raw.callTool({ name: 'propose_note', arguments: { branch: proposal, subject: [prereq], label: 'l', rationale: 'r', message: 'm', basedOn } });
+        expect(stale.isError).toBe(true);
+        expect(data<{ error: string }>(stale).error).toBe('precondition_failed');
+      });
+    });
   });
 });

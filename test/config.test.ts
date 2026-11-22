@@ -24,5 +24,7 @@ describe('configFromEnv', () => {
     expect(() => configFromEnv({ ARMATURE_HUB_URL: 'not a url' })).toThrow(/not a URL/);
     expect(() => configFromEnv({ ARMATURE_AGENT: 'armature-mcp' })).toThrow(/agent:/);
     expect(() => configFromEnv({ ARMATURE_WRITES: 'yes' })).toThrow(/on or off/);
+    expect(() => configFromEnv({ ARMATURE_WRITES: 'on', ARMATURE_USER: 'demo-designer@example.edu' })).toThrow(/ARMATURE_AGENT/);
+    expect(() => configFromEnv({ ARMATURE_WRITES: 'on', ARMATURE_AGENT: 'agent:armature-mcp' })).toThrow(/ARMATURE_USER/);
   });
 });

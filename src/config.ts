@@ -41,6 +41,8 @@ export function configFromEnv(env: Record<string, string | undefined> = process.
 
   const user = set(env.ARMATURE_USER);
   const localToken = set(env.ARMATURE_LOCAL_TOKEN);
+  // A write is the agent's, acting for the person (plan §7): without both, the record could not say who did it for whom.
+  if (writes === 'on' && (!user || !agent)) throw new ConfigError('ARMATURE_WRITES=on needs ARMATURE_USER (the person) and ARMATURE_AGENT (the agent acting for them)');
   return {
     hubUrl,
     ...(user ? { user } : {}),
